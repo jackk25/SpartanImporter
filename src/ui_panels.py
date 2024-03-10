@@ -3,7 +3,7 @@ from bpy.types import Panel
 from .operators import ImportSpartan
 
 class SPRTN_Panel:
-    bl_category = "Spartan Importer"
+    bl_category = "Spartan Sync"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
 

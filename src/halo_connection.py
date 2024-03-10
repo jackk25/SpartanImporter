@@ -12,7 +12,7 @@ def get_current_core(headers, xuid, clearance):
 
     inventory_request  = requests.get(url, headers=headers)
 
-    if inventory_request.status_code:
+    if inventory_request.status_code == 200:
         return inventory_request.json()
 
 def get_item_details(spartan_token, path):

@@ -2,18 +2,17 @@ import os
 import sys
 
 # Add vendor directory to module search path
+# This is not good because I'm directly including my libraries
+# So no dependency control or pip, but MSAL is way too secure to pass up
+
 parent_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 vendor_dir = os.path.join(parent_dir, 'vendor')
-print(parent_dir)
-print(vendor_dir)
 
 sys.path.append(vendor_dir)
 
 from msal import PublicClientApplication
 import requests
-import json
 import xml.etree.ElementTree as ET
-
 
 app = PublicClientApplication(
     "bd4b98d1-2f0a-48c3-b717-268991f08a2a",
@@ -21,22 +20,7 @@ app = PublicClientApplication(
 )
 
 def get_access_token(app):
-    result = None
-    accounts = app.get_accounts()
-
-    # Attempt to grab users from the cache
-    if accounts:
-        print("Pick acc:")
-
-        for account in accounts:
-            print(account["username"])
-
-        chosen = accounts[0]
-        result = app.acquire_token_silent(["Xboxlive.signin", "Xboxlive.offline_access"], account=chosen)
-
-    if not result:
-        # So no suitable token exists in cache. Let's get a new one from Azure AD.
-        result = app.acquire_token_interactive(scopes=["Xboxlive.signin", "Xboxlive.offline_access"])
+    result = app.acquire_token_interactive(scopes=["Xboxlive.signin", "Xboxlive.offline_access"])
     if "access_token" in result:
         access_token = result["access_token"]
         return access_token
@@ -57,7 +41,7 @@ def get_user_token(access_token):
         "TokenType": "JWT"
     }
 
-    req = requests.post("https://user.auth.xboxlive.com/user/authenticate", data=json.dumps(post_body))
+    req = requests.post("https://user.auth.xboxlive.com/user/authenticate", json=post_body)
 
     if req.status_code == 200:
         response_json = req.json()
@@ -86,7 +70,7 @@ def get_xsts_token(user_token):
         "TokenType": "JWT"
     }
 
-    xsts_req = requests.post("https://xsts.auth.xboxlive.com/xsts/authorize", headers=headers, data=json.dumps(post_body))
+    xsts_req = requests.post("https://xsts.auth.xboxlive.com/xsts/authorize", headers=headers, json=post_body)
 
     if xsts_req.status_code == 200:
         response_json = xsts_req.json()
@@ -160,20 +144,25 @@ def get_clearance(headers, xuid):
     
 def authenticate():
     access_token = get_access_token(app)
-    if access_token:
-            user_token, uhs = get_user_token(access_token)
-            if user_token:
-                xsts_token = get_xsts_token(user_token)
-                if xsts_token:
-                    spartan_token = get_spartan_token(xsts_token)
+    
+    if not access_token:
+        return
+    user_token, uhs = get_user_token(access_token)
+    if not user_token:
+        return
+    xsts_token = get_xsts_token(user_token)
+    if not xsts_token:
+        return
+    
+    spartan_token = get_spartan_token(xsts_token)
 
-                    headers = {
-                        "Content-Type": "application/json",
-                        "x-343-authorization-spartan": spartan_token
-                    }
+    headers = {
+        "Content-Type": "application/json",
+        "x-343-authorization-spartan": spartan_token
+    }
 
-                    xuid = get_xuid(headers)
-                    if xuid:
-                        clearance = get_clearance(headers, xuid)
+    xuid = get_xuid(headers)
+    if xuid:
+        clearance = get_clearance(headers, xuid)
 
-                        return spartan_token, xuid, clearance, headers
+        return spartan_token, xuid, clearance, headers
